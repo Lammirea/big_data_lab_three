@@ -30,13 +30,14 @@ class DataMaker:
 
         if os.path.exists(self.config_path):
             # Читаем конфигурацию
-            self.config.read(self.config_path)
-            self.log.info("Конфигурация успешно загружена")
-            self.log.debug("Config sections: " + ", ".join(self.config.sections()))
-            if 'UTEST_DATA' in self.config:
-                self.log.debug("UTEST_DATA items: " + str(dict(self.config.items('UTEST_DATA'))))
-            else:
-                self.log.debug("UTEST_DATA section missing")
+            try:
+                with open(self.config_path, "r", encoding="utf-8-sig", errors="replace") as f:
+                    # configparser может читать из file-like объекта
+                    self.config.read_file(f)
+                self.log.info("Конфигурация успешно загружена (utf-8-sig)")
+            except Exception as e:
+                self.log.error(f"Ошибка чтения config.ini: {e}")
+                raise
 
         else:
             error_msg = f"Ошибка: файл {self.config_path} не найден"
@@ -103,13 +104,14 @@ class DataMaker:
         try:
             cfg_dir = os.path.dirname(self.config_path)
 
-            # TRAIN
+            # безопасно читаем train_file
             train_file_val = self.config.get('UTEST_DATA', 'train_file', fallback=None)
-            if not train_file_val:
+            if train_file_val is None:
                 self.log.error('train_file не задан в секции UTEST_DATA')
                 return False
+            # убираем кавычки и пробелы
+            train_file_val = train_file_val.strip().strip('"').strip("'")
 
-            # Если путь в конфиге относительный — делаем его относительным к папке config.ini
             if not os.path.isabs(train_file_val):
                 train_file = os.path.normpath(os.path.join(cfg_dir, train_file_val))
             else:
@@ -118,8 +120,9 @@ class DataMaker:
             if not os.path.isfile(train_file):
                 self.log.error(f"Train file not found: {train_file}")
                 return False
-            
+
             train_df = pd.read_csv(train_file, encoding='latin1', low_memory=False)
+            
             X_train, y_train = self.preprocess_data(train_df)
             # Сохранение предобработанных обучающих данных
             X_train.to_csv(self.train_path[0], index=True)
@@ -130,6 +133,8 @@ class DataMaker:
             if not test_file_val:
                 self.log.error('test_file не задан в секции DATA')
                 return False
+
+            test_file_val = test_file_val.strip().strip('"').strip("'")
 
             if not os.path.isabs(test_file_val):
                 test_path = os.path.normpath(os.path.join(cfg_dir, test_file_val))
