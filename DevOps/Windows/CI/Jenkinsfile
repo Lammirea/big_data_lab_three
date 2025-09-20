@@ -126,13 +126,13 @@ pipeline {
             steps {
                 dir("big_data_lab_three") {
                     bat '''
-                        chcp 65001
                         docker-compose up -d
-                        for /f "tokens=*" %%i in ('docker ps -qf "name=big_data_lab_three-web-1"') do set containerId=%%i
-                        echo Container ID: %containerId%
-                        if "%containerId%"=="" (
+                        for /f %%i in ('docker ps -qf "name=^big_data_lab_three-web-1"') do set containerId=%%i
+                        echo %containerId%
+                        IF "%containerId%" == "" (
                             echo "No container running"
-                        ) else (
+                        )
+                        ELSE (
                             docker logs --tail 1000 -f %containerId%
                         )
                     '''
