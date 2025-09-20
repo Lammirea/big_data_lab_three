@@ -12,25 +12,64 @@ pipeline {
         timestamps()
         skipDefaultCheckout(true)
     }
-    
+
     stages {
         stage('Clone github repository') {
             steps {
                 cleanWs()
-                bat 'chcp 65001 && git clone -b develop https://github.com/Lammirea/big_data_lab_second.git  '
+                bat 'chcp 65001 && git clone -b develop https://github.com/Lammirea/big_data_lab_three.git'
             }
         }
 
         stage('Checkout repo dir') {
             steps {
-                bat 'chcp 65001 && cd big_data_lab_second && dir'
+                bat 'chcp 65001 && cd big_data_lab_three && dir'
             }
         }
 
+        stage('Decrypt ansible-vault files') {
+            // Делаем расшифровку один раз для всего pipeline (тесты + docker-compose)
+            steps {
+                dir('big_data_lab_three') {
+                    // Рекомендуемый вариант: используем Secret file (credentialsId = 'ansible-vault-pass-file')
+                    withCredentials([file(credentialsId: 'vault-pass-id', variable: 'VAULT_PASS_FILE')]) {
+                        bat '''
+                            chcp 65001
+                            REM -- убедимся, что файлы .env.vault / config.ini.vault присутствуют
+                            if not exist .env.vault (
+                              echo ERROR: .env.vault not found && exit /b 1
+                            )
+                            if not exist config.ini.vault (
+                              echo ERROR: config.ini.vault not found && exit /b 1
+                            )
+
+                            REM -- запускаем контейнер с ansible и монтируем рабочую папку
+                            docker run --rm -v "%cd%":/work -w /work williamyeh/ansible:latest bash -lc ^
+                              "ansible-vault view --vault-password-file %VAULT_PASS_FILE% .env.vault > .env && ^
+                               ansible-vault view --vault-password-file %VAULT_PASS_FILE% config.ini.vault > config.ini"
+
+                            REM -- уберём файл-credential, если он каким-то образом оказался в рабочей папке (обычно not needed)
+                            if exist %VAULT_PASS_FILE% del /Q %VAULT_PASS_FILE% || echo VAULT_PASS_FILE removed
+                        '''
+                    }
+
+                    /*  Альтернатива: если у вас Secret text (ID = 'ansible-vault-pass-text'), используйте:
+                    withCredentials([string(credentialsId: 'ansible-vault-pass-text', variable: 'VAULT_PASS')]) {
+                        bat '''
+                            chcp 65001
+                            echo %VAULT_PASS% > vault_pass.txt
+                            docker run --rm -v "%cd%":/work -w /work williamyeh/ansible:latest bash -lc "ansible-vault view --vault-password-file vault_pass.txt .env.vault > .env && ansible-vault view --vault-password-file vault_pass.txt config.ini.vault > config.ini"
+                            del /Q vault_pass.txt
+                        '''
+                    }
+                    */
+                }
+            }
+        }
 
         stage('Run Unit Tests (in Docker)') {
             steps {
-                dir('big_data_lab_second') {
+                dir('big_data_lab_three') {
                     bat '''
                         chcp 65001
                         REM run tests inside official python image; mounts repo into /app
@@ -45,7 +84,6 @@ pipeline {
             }
         }
 
-
         stage('Login'){
             steps{
                 bat 'chcp 65001 && docker login -u %DOCKERHUB_CREDS_USR% -p %DOCKERHUB_CREDS_PSW%'
@@ -56,10 +94,10 @@ pipeline {
             steps {
                 script {
                     try {
-                        bat 'chcp 65001 && cd big_data_lab_second && docker-compose build'
+                        bat 'chcp 65001 && cd big_data_lab_three && docker-compose build'
                     }
                     finally {
-                        dir('big_data_lab_second') {
+                        dir('big_data_lab_three') {
                             withCredentials([
                                 string(credentialsId: 'redis-password', variable: 'REDIS_PASSWORD'),
                                 string(credentialsId: 'redis-host', variable: 'REDIS_HOST'),
@@ -68,6 +106,7 @@ pipeline {
                             ]) {
                                 bat '''
                                     chcp 65001
+                                    REM --- дописываем параметры redis в .env (уже расшифрована или создана ранее)
                                     echo REDIS_HOST=%REDIS_HOST% >> .env
                                     echo REDIS_PORT=%REDIS_PORT% >> .env
                                     echo REDIS_DB=%REDIS_DB% >> .env
@@ -83,16 +122,12 @@ pipeline {
 
         stage('Checkout container logs') {
             steps {
-                dir("big_data_lab_second") {
+                dir("big_data_lab_three") {
                     bat '''
                         chcp 65001
                         docker-compose up -d
-                        
-                        REM Получаем ID контейнера по имени сервиса (например, web)
-                        for /f "tokens=*" %%i in ('docker ps -qf "name=big_data_lab_second-web-1"') do set containerId=%%i
-                        
+                        for /f "tokens=*" %%i in ('docker ps -qf "name=big_data_lab_three-web-1"') do set containerId=%%i
                         echo Container ID: %containerId%
-                        
                         if "%containerId%"=="" (
                             echo "No container running"
                         ) else (
@@ -105,7 +140,7 @@ pipeline {
 
         stage('Checkout coverage report'){
             steps{
-                dir("big_data_lab_second"){
+                dir("big_data_lab_three"){
                     bat '''
                         chcp 65001
                         docker-compose logs -t --tail 10
@@ -116,7 +151,7 @@ pipeline {
 
         stage('Push'){
             steps{
-                bat 'chcp 65001 && docker push derelia/big_data_lab_second:latest'
+                bat 'chcp 65001 && docker push derelia/big_data_lab_three:latest'
             }
         }
     }
@@ -125,13 +160,18 @@ pipeline {
         always {
             bat '''
                 chcp 65001
-                docker stop big_data_lab_second-web-1 || exit /b 0
-                docker rm big_data_lab_second-web-1 || exit /b 0
+                docker stop big_data_lab_three-web-1 || exit /b 0
+                docker rm big_data_lab_three-web-1 || exit /b 0
                 docker stop redis_db || exit /b 0
                 docker rm redis_db || exit /b 0
-                docker rmi derelia/big_data_lab_second:latest || exit /b 0
+                docker rmi derelia/big_data_lab_three:latest || exit /b 0
                 docker rmi redis:latest || exit /b 0
                 docker logout
+
+                REM ---- удаляем расшифрованные и временные файлы из workspace ----
+                del /Q big_data_lab_three\\.env || exit /b 0
+                del /Q big_data_lab_three\\config.ini || exit /b 0
+                del /Q big_data_lab_three\\vault_pass.txt || exit /b 0
             '''
             cleanWs()
         }

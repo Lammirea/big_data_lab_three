@@ -3,3 +3,5 @@
 /data
 /python
 /src/unit_tests/__pycache__
+/.env
+/config.ini
