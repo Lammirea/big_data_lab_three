@@ -25,9 +25,7 @@ class TestTrainModels(unittest.TestCase):
 
     def test_log_reg_model(self):
         """Тест обучения логистической регрессии."""
-        train_file = config.get('DATA', 'train_file', fallback=None)
-        train_df = pd.read_csv(train_file, encoding='latin1', low_memory=False)
-        
+       
         res = self.model.log_reg(use_config=False, predict=False, max_iter=50)
         self.assertTrue(res)
         # Проверяем, что файл модели создан
