@@ -35,21 +35,23 @@ pipeline {
                     withCredentials([file(credentialsId: 'vault-pass-id', variable: 'VAULT_PASS_FILE')]) {
                         bat '''
                             chcp 65001
-                            REM -- убедимся, что файлы .env.vault / config.ini.vault присутствуют
-                            if not exist .env.vault (
-                              echo ERROR: .env.vault not found && exit /b 1
-                            )
-                            if not exist config.ini.vault (
-                              echo ERROR: config.ini.vault not found && exit /b 1
-                            )
 
-                            REM -- запускаем контейнер с ansible и монтируем рабочую папку
-                            docker run --rm -v "%cd%":/work -w /work williamyeh/ansible:latest bash -lc ^
-                              "ansible-vault view --vault-password-file %VAULT_PASS_FILE% .env.vault > .env && ^
-                               ansible-vault view --vault-password-file %VAULT_PASS_FILE% config.ini.vault > config.ini"
+                            REM копируем секретный файл (Jenkins дает путь на агенте) в workspace
+                            copy "%VAULT_PASS_FILE%" vault_pass.txt
 
-                            REM -- уберём файл-credential, если он каким-то образом оказался в рабочей папке (обычно not needed)
-                            if exist %VAULT_PASS_FILE% del /Q %VAULT_PASS_FILE% || echo VAULT_PASS_FILE removed
+                            REM создаем скрипт decrypt.sh, который потом выполнится внутри Linux-контейнера
+                            echo #!/bin/bash > decrypt.sh
+                            REM экранируем > в Windows командном интерпретаторе с ^
+                            echo ansible-vault view --vault-password-file vault_pass.txt .env.vault ^> .env >> decrypt.sh
+                            echo ansible-vault view --vault-password-file vault_pass.txt config.ini.vault ^> config.ini >> decrypt.sh
+                            REM сделаем скрипт исполняемым не нужно — запустим через bash
+
+                            REM запускаем Linux-контейнер; внутри него ставим ansible-core и выполняем decrypt.sh
+                            docker run --rm -v "%cd%":/work -w /work python:3.11-bullseye bash -lc "pip install --upgrade pip setuptools wheel ansible-core && bash ./decrypt.sh"
+
+                            REM удаляем временные артефакты
+                            del /Q vault_pass.txt || echo no vault_pass.txt
+                            del /Q decrypt.sh || echo no decrypt.sh
                         '''
                     }
 
