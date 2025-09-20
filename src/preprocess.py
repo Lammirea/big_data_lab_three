@@ -96,9 +96,9 @@ class DataMaker:
         '''
         try:
             # Загрузка обучающих данных (в тестах используется секция UTEST_DATA)
-            train_file = self.config.get('UTEST_DATA', 'train_file', fallback=None)
+            train_file = self.config.get('DATA', 'train_file', fallback=None)
             if not train_file:
-                self.log.error('train_file не задан в секции UTEST_DATA')
+                self.log.error('train_file не задан в секции DATA')
                 return False
             train_df = pd.read_csv(train_file, encoding='latin1', low_memory=False)
             X_train, y_train = self.preprocess_data(train_df)
