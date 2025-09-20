@@ -12,23 +12,34 @@ SHOW_LOG = True
 class DataMaker:
     def __init__(self, to_show=True) -> None:
         # Logger: second parameter is "enable" in Logger
-        logger = Logger(SHOW_LOG)
-        self.config = configparser.ConfigParser()
+        logger = Logger(SHOW_LOG, to_show)
+        if to_show:
+            logger.clear_log_file()
         self.log = logger.get_logger(__name__)
-        
+
+        # Инициализируем парсер конфигурации прежде чем читать
+        self.config = configparser.ConfigParser()
+
         # Получаем директорию текущего файла
         current_dir = os.path.dirname(os.path.abspath(__file__))
         # Формируем путь на уровень выше (если config.ini в родительской папке)
-        config_path = os.path.abspath(os.path.join(current_dir, "..", "config.ini"))
-        self.config_path = config_path  # сохраняем, чтобы при записи знать куда писать
-        
-        print(f"Пытаемся загрузить конфиг из: {config_path}")
-        
-        if os.path.exists(config_path):
-            self.config.read(config_path)
+        self.config_path = os.path.abspath(os.path.join(current_dir, "..", "config.ini"))
+
+        # Логируем путь к конфигу
+        self.log.debug(f"Пытаемся загрузить конфиг из: {self.config_path}")
+
+        if os.path.exists(self.config_path):
+            # Читаем конфигурацию
+            self.config.read(self.config_path)
             self.log.info("Конфигурация успешно загружена")
+            self.log.debug("Config sections: " + ", ".join(self.config.sections()))
+            if 'UTEST_DATA' in self.config:
+                self.log.debug("UTEST_DATA items: " + str(dict(self.config.items('UTEST_DATA'))))
+            else:
+                self.log.debug("UTEST_DATA section missing")
+
         else:
-            error_msg = f"Ошибка: файл {config_path} не найден"
+            error_msg = f"Ошибка: файл {self.config_path} не найден"
             self.log.error(error_msg)
             raise FileNotFoundError(error_msg)
 
@@ -90,7 +101,6 @@ class DataMaker:
         Загрузка, предобработка и сохранение данных
         '''
         try:
-            # Загрузка обучающих данных (в тестах используется секция UTEST_DATA)
             cfg_dir = os.path.dirname(self.config_path)
 
             # TRAIN
@@ -108,10 +118,14 @@ class DataMaker:
             if not os.path.isfile(train_file):
                 self.log.error(f"Train file not found: {train_file}")
                 return False
-
+            
             train_df = pd.read_csv(train_file, encoding='latin1', low_memory=False)
+            X_train, y_train = self.preprocess_data(train_df)
+            # Сохранение предобработанных обучающих данных
+            X_train.to_csv(self.train_path[0], index=True)
+            y_train.to_csv(self.train_path[1], index=True)
 
-            # TEST
+            # Загрузка тестовых данных
             test_file_val = self.config.get('DATA', 'test_file', fallback=None)
             if not test_file_val:
                 self.log.error('test_file не задан в секции DATA')
