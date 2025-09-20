@@ -1,0 +1,5 @@
+/.venv
+/src/__pycache__
+/data
+/python
+/src/unit_tests/__pycache__
