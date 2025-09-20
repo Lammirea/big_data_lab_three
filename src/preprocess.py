@@ -12,28 +12,23 @@ SHOW_LOG = True
 class DataMaker:
     def __init__(self, to_show=True) -> None:
         # Logger: second parameter is "enable" in Logger
-        logger = Logger(SHOW_LOG, to_show)
-        if to_show:
-            logger.clear_log_file()
-        self.log = logger.get_logger(__name__)
-
-        # Инициализируем парсер конфигурации прежде чем читать
+        logger = Logger(SHOW_LOG)
         self.config = configparser.ConfigParser()
-
+        self.log = logger.get_logger(__name__)
+        
         # Получаем директорию текущего файла
         current_dir = os.path.dirname(os.path.abspath(__file__))
         # Формируем путь на уровень выше (если config.ini в родительской папке)
-        self.config_path = os.path.abspath(os.path.join(current_dir, "..", "config.ini"))
-
-        # Логируем путь к конфигу
-        self.log.debug(f"Пытаемся загрузить конфиг из: {self.config_path}")
-
-        if os.path.exists(self.config_path):
-            # Читаем конфигурацию
-            self.config.read(self.config_path)
+        config_path = os.path.abspath(os.path.join(current_dir, "..", "config.ini"))
+        self.config_path = config_path  # сохраняем, чтобы при записи знать куда писать
+        
+        print(f"Пытаемся загрузить конфиг из: {config_path}")
+        
+        if os.path.exists(config_path):
+            self.config.read(config_path)
             self.log.info("Конфигурация успешно загружена")
         else:
-            error_msg = f"Ошибка: файл {self.config_path} не найден"
+            error_msg = f"Ошибка: файл {config_path} не найден"
             self.log.error(error_msg)
             raise FileNotFoundError(error_msg)
 
@@ -96,22 +91,42 @@ class DataMaker:
         '''
         try:
             # Загрузка обучающих данных (в тестах используется секция UTEST_DATA)
-            train_file = self.config.get('DATA', 'train_file', fallback=None)
-            if not train_file:
-                self.log.error('train_file не задан в секции DATA')
-                return False
-            train_df = pd.read_csv(train_file, encoding='latin1', low_memory=False)
-            X_train, y_train = self.preprocess_data(train_df)
-            # Сохранение предобработанных обучающих данных
-            X_train.to_csv(self.train_path[0], index=True)
-            y_train.to_csv(self.train_path[1], index=True)
+            cfg_dir = os.path.dirname(self.config_path)
 
-            # Загрузка тестовых данных
-            test_file = self.config.get('DATA', 'test_file', fallback=None)
-            if not test_file:
+            # TRAIN
+            train_file_val = self.config.get('UTEST_DATA', 'train_file', fallback=None)
+            if not train_file_val:
+                self.log.error('train_file не задан в секции UTEST_DATA')
+                return False
+
+            # Если путь в конфиге относительный — делаем его относительным к папке config.ini
+            if not os.path.isabs(train_file_val):
+                train_file = os.path.normpath(os.path.join(cfg_dir, train_file_val))
+            else:
+                train_file = os.path.normpath(train_file_val)
+
+            if not os.path.isfile(train_file):
+                self.log.error(f"Train file not found: {train_file}")
+                return False
+
+            train_df = pd.read_csv(train_file, encoding='latin1', low_memory=False)
+
+            # TEST
+            test_file_val = self.config.get('DATA', 'test_file', fallback=None)
+            if not test_file_val:
                 self.log.error('test_file не задан в секции DATA')
                 return False
-            test_df = pd.read_csv(test_file, encoding='latin1', low_memory=False)
+
+            if not os.path.isabs(test_file_val):
+                test_path = os.path.normpath(os.path.join(cfg_dir, test_file_val))
+            else:
+                test_path = os.path.normpath(test_file_val)
+
+            if not os.path.isfile(test_path):
+                self.log.error(f"Test file not found: {test_path}")
+                return False
+
+            test_df = pd.read_csv(test_path, encoding='latin1', low_memory=False)
             X_test, y_test = self.preprocess_data(test_df)
 
             # Сохранение предобработанных тестовых данных
