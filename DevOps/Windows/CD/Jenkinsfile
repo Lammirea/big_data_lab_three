@@ -10,7 +10,7 @@ pipeline {
         LC_ALL = "en_US.UTF-8"
         LANG = "en_US.UTF-8"
         LANGUAGE = "en_US.UTF-8"
-        COMPOSE_PROJECT_DIR = "big_data_lab_second"
+        COMPOSE_PROJECT_DIR = "big_data_lab_three"
     }
 
     options {
@@ -22,13 +22,13 @@ pipeline {
         stage('Clone github repository') {
             steps {
                 cleanWs()
-                bat '''chcp 65001 && git clone -b develop https://github.com/Lammirea/big_data_lab_second.git'''
+                bat '''chcp 65001 && git clone -b develop https://github.com/Lammirea/big_data_lab_three.git'''
             }
         }
 
         stage('Checkout repo dir') {
             steps {
-                bat '''chcp 65001 && if exist big_data_lab_second (cd big_data_lab_second && dir) else (echo "Directory big_data_lab_second not found" && exit /b 1)'''
+                bat '''chcp 65001 && if exist big_data_lab_three (cd big_data_lab_three && dir) else (echo "Directory big_data_lab_three not found" && exit /b 1)'''
             }
         }
 
@@ -59,7 +59,7 @@ pipeline {
                         echo REDIS_PASSWORD=%REDIS_PASSWORD% >> .env
 
                         REM -- build image and bring up services
-                        docker-compose pull derelia/big_data_lab_second:latest
+                        docker-compose pull derelia/big_data_lab_three:latest
                         docker-compose build
                         docker-compose up -d
                         '''
@@ -98,7 +98,7 @@ pipeline {
                 chcp 65001
                 echo "Stopping and removing compose services..."
                 docker-compose down -v --remove-orphans || echo "docker-compose down failed (maybe not running)"
-                docker rmi derelia/big_data_lab_second:latest 2>nul || echo "Image derelia/big_data_lab_second:latest not found"
+                docker rmi derelia/big_data_lab_three:latest 2>nul || echo "Image derelia/big_data_lab_three:latest not found"
                 '''
             }
             bat '''chcp 65001
