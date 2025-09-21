@@ -176,11 +176,6 @@ pipeline {
                 docker rmi derelia/big_data_lab_three:latest || exit /b 0
                 docker rmi redis:latest || exit /b 0
                 docker logout
-
-                REM ---- удаляем расшифрованные и временные файлы из workspace ----
-                del /Q big_data_lab_three\\.env || exit /b 0
-                del /Q big_data_lab_three\\config.ini || exit /b 0
-                del /Q big_data_lab_three\\vault_pass.txt || exit /b 0
             '''
             cleanWs()
         }
