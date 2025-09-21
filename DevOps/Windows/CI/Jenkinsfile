@@ -72,19 +72,20 @@ pipeline {
         stage('Run Unit Tests (in Docker)') {
             steps {
                 dir('big_data_lab_three') {
-                    bat '''
-                        chcp 65001
-                        REM run tests inside official python image; mounts repo into /app
-                        docker run --rm -v "%cd%":/app -w /app python:3.11-bullseye bash -lc " \
-                        python -m pip install --upgrade pip setuptools wheel && \
-                        pip install -r requirements.txt coverage pytest --root-user-action=ignore && \
-                        coverage run -m pytest src/unit_tests -q --maxfail=1 --disable-warnings && \
-                        coverage report -m \
-                        "
-                    '''
+                bat '''
+                    chcp 65001
+                    docker run --rm -v "%cd%":/app -w /app python:3.11-bullseye bash -lc " \
+                    python -m pip install --upgrade pip setuptools wheel && \
+                    pip install -r requirements.txt coverage pytest --root-user-action=ignore && \
+                    coverage run -m pytest src/unit_tests -q --maxfail=1 --disable-warnings && \
+                    coverage xml -i && \
+                    coverage html -d coverage_html \
+                    "
+                '''
                 }
             }
         }
+
 
         stage('Login'){
             steps{
@@ -133,23 +134,29 @@ pipeline {
                             echo "No container running"
                         )
                         ELSE (
-                            docker logs --tail 1000 -f %containerId%
+                            docker logs --tail 1000 %containerId%
                         )
                     '''
                 }
             }
         }
 
-        stage('Checkout coverage report'){
-            steps{
-                dir("big_data_lab_three"){
-                    bat '''
-                        chcp 65001
-                        docker-compose logs -t --tail 10
-                    '''
+        stage('Checkout coverage report') {
+            steps {
+                dir('big_data_lab_three') {
+                // просто вывести краткую сводку
+                bat 'chcp 65001 && type coverage.xml || echo "coverage.xml not found"'
+                // или лучше: опубликовать html через плагин Publish HTML
+                publishHTML (target: [
+                    reportDir: 'coverage_html',
+                    reportFiles: 'index.html',
+                    reportName: 'Coverage Report',
+                    keepAll: true
+                ])
                 }
             }
         }
+
 
         stage('Push'){
             steps{
